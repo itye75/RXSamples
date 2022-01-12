@@ -4,8 +4,13 @@
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <StartupObject>RXSamples.Program</StartupObject>
+    <StartupObject></StartupObject>
+    <OutputType>Library</OutputType>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Main.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
