@@ -4,6 +4,7 @@ using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Reactive.Threading.Tasks;
 using NUnit.Framework;
 using Serilog;
 
@@ -99,7 +100,28 @@ namespace RXSamples
             IDisposable disposable = Disposable.Create(() => TestContext.Progress.WriteLine("disposed!"));
             disposable.Dispose();
         }
+        
+        [TestCase]
+        public void A08_ToObservable()
+        {
+            var foldersObservable = Directory.GetDirectories(@"c:\").ToObservable();
+            // var folderObservable = Observable.ToObservable(Directory.GetDirectories(@"c:\"));
+            foldersObservable.Subscribe(folder => TestContext.Progress.WriteLine(folder));
+            Task.Delay(TimeSpan.FromSeconds(5));
+        }
+        
+        [TestCase]
+        public void A09_ToObservableAsync()
+        {
+            var foldersObservableTask = Task.Run(() => Directory.GetDirectories(@"c:\")).ToObservable();    // raises single event of end of task
 
+            // subscription run on the genuine thread
+            foldersObservableTask.Subscribe(folder => folder.ToList().ForEach(folderName => TestContext.Progress.WriteLine(folderName)));
+
+            Task.Delay(TimeSpan.FromSeconds(5));
+        }
+
+        
         [TestCase]
         public void A10_Subject()
         {
@@ -225,9 +247,10 @@ namespace RXSamples
         }
 
         [TestCase]
-        public void A16_BehaviorSubject()
+        public void A16A_BehaviorSubject()
         {
             var behaviorSubject = new BehaviorSubject<int>(2);
+            
             IObservable<int> observable = behaviorSubject;
 
             observable.Subscribe(num => TestContext.Progress.WriteLine($"handler:{num}"));
@@ -236,6 +259,21 @@ namespace RXSamples
 
             behaviorSubject.OnNext(5);
             TestContext.Progress.WriteLine($"Subject.Value{behaviorSubject.Value}");
+        }
+
+        [TestCase]
+        public void A16B_ReplaySubject()
+        {
+            var replaySubject = new ReplaySubject<int>(3);
+
+            IObservable<int> observable = replaySubject;
+
+            replaySubject.OnNext(1);
+            replaySubject.OnNext(2);
+            replaySubject.OnNext(3);
+            replaySubject.OnNext(4);
+
+            observable.Subscribe(num => TestContext.Progress.WriteLine($"{num}"));      // 2,3,4 will be shown
         }
 
         [TestCase]
@@ -311,27 +349,38 @@ namespace RXSamples
             oc.Add(5);
 
             /*
-            // works only in WPF application
-            var moves = Observable.FromEventPattern<MouseEventArgs>(frm, nameof(frm.MouseMove));
-			using (moves.Subscribe(evt => { lbl.Text = evt.EventArgs.Location.ToString(); }))
-			{
-				Application.Run(frm);
-			}
+            // on ui application
+            var mouseMoves = Observable.FromEventPattern<MouseEventArgs>(frm, nameof(frm.MouseMove));
+			mouseMoves.Subscribe(evt => { lbl.Text = evt.EventArgs.Location.ToString(); }))			
             */
 
             /////////////////////////////////////////////////////////////////////////////////////////////////////
             // use FromEventPattern when event is of type EventHanlder, use FromEvent when using custom event
             /////////////////////////////////////////////////////////////////////////////////////////////////////
+            
+            /*
+            // use o.ObserveOnDispatcher().Subscribe(handler) in WPF thread to return to Dispatcher thread
+            */
         }
-        
+
         [TestCase]
-        public void A22_FromAsync()
+        public void A21_FromAsync()
         {
             Task<int> CalcFileLength() => Task.Delay(TimeSpan.FromSeconds(2)).ContinueWith(t => 1024 /*calc length*/);
             var readLengthObservable = Observable.FromAsync(CalcFileLength);
             readLengthObservable.Subscribe(bytesRead => TestContext.Progress.WriteLine(bytesRead));
             readLengthObservable.Subscribe(bytesRead => TestContext.Progress.WriteLine(bytesRead)); // each subscribe will trigger the Task
             Task.Delay(TimeSpan.FromSeconds(3)).Wait();
+        }
+        
+        [TestCase]
+        public void A22_ReadFileAsync()
+        {
+            Stream stream = new FileStream(@"C:\build.ini", FileMode.Open);
+            var o = Observable.Using(
+                () => new StreamReader(stream),
+                reader => Observable.FromAsync(reader.ReadLineAsync).Repeat().TakeWhile(line => line != null));
+            o.Subscribe(line => TestContext.Progress.WriteLine(line));  // run on the genuine thread
         }
 
         [TestCase]
@@ -355,6 +404,15 @@ namespace RXSamples
 
             observable.Where(i => i == 3).Subscribe(n => autoResetEvent.Set());
             autoResetEvent.WaitOne();
+        }
+
+        [TestCase]
+        public async Task A24_AsyncAwait()
+        {
+            var xs = Observable.Range(0, 10, ThreadPoolScheduler.Instance);
+            Console.WriteLine("Last = " + await xs);                    // 9
+            Console.WriteLine("First = " + await xs.FirstAsync());      // 0
+            Console.WriteLine("Third = " + await xs.ElementAt(3));      // 3
         }
 
         [TestCase]
@@ -482,15 +540,16 @@ namespace RXSamples
         public void A36_Defer()
         {
             var obs = Observable.Return(DateTime.Now);
-            var deferedObs = Observable.Defer(() => Observable.Return(DateTime.Now));
+            // .Defer() create observable only after subscription
+            var deferObs = Observable.Defer(() => Observable.Return(DateTime.Now));
 
             obs.Subscribe(dt => TestContext.Progress.WriteLine($"{DateTime.Now.ToLocalTime()} not defered: {dt}"));
-            deferedObs.Subscribe(dt => TestContext.Progress.WriteLine($"{DateTime.Now.ToLocalTime()} defered: {dt}"));
+            deferObs.Subscribe(dt => TestContext.Progress.WriteLine($"{DateTime.Now.ToLocalTime()} defered: {dt}"));
             
             Task.Delay(TimeSpan.FromSeconds(2)).Wait();
             
             obs.Subscribe(dt => TestContext.Progress.WriteLine($"{DateTime.Now.ToLocalTime()} not defered: {dt}"));
-            deferedObs.Subscribe(dt => TestContext.Progress.WriteLine($"{DateTime.Now.ToLocalTime()} defered: {dt}"));
+            deferObs.Subscribe(dt => TestContext.Progress.WriteLine($"{DateTime.Now.ToLocalTime()} defered: {dt}"));
 
         }
 
