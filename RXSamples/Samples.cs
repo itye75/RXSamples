@@ -26,7 +26,6 @@ namespace RXSamples
         }
         */
 
-
         [TestCase]
         public void A01_Range()
         {
@@ -119,7 +118,8 @@ namespace RXSamples
 
             subject.OnError(new InvalidDataException("Bad number"));
 
-            //observable.Subscribe(onNextHandler, onErrorHandler, onCompleted);
+            // another registration will raise the same InvalidDataException because that is what on the subject
+            // observable.Subscribe(onNextHandler, onErrorHandler, onCompleted);
 
             // OnError & OnCompleted disposes the Subject stream!
             subject.OnNext(40);     // won't raise!!
